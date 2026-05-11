@@ -47,6 +47,7 @@ class PoeClient(LLMClient):
         *,
         drafting_bot: str = "Claude-Opus-4.7",
         scout_bot: str = "Claude-Opus-4.7-Search",
+        normaliser_bot: str = "Claude-Sonnet-4.6",
         http_client: httpx.Client | None = None,
         base_url: str = POE_BASE_URL,
     ) -> None:
@@ -55,15 +56,18 @@ class PoeClient(LLMClient):
         self._api_key = api_key
         self._drafting_bot = drafting_bot
         self._scout_bot = scout_bot
+        self._normaliser_bot = normaliser_bot
         self._base_url = base_url.rstrip("/")
         self._http = http_client or httpx.Client(timeout=httpx.Timeout(300.0))
         self._warned_tools = False
 
     def _bot_for(self, prompt_template: str | None) -> str:
-        # Anything named "scout_agent" goes to the search-capable bot;
-        # everything else (drafting, critic) goes to the drafting bot.
+        # Route by prompt template: scout → search-capable bot, normaliser →
+        # cheap Sonnet-class bot, everything else (drafting, critic) → drafting bot.
         if prompt_template and "scout_agent" in prompt_template:
             return self._scout_bot
+        if prompt_template and "normaliser" in prompt_template:
+            return self._normaliser_bot
         return self._drafting_bot
 
     @staticmethod

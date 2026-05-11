@@ -6,8 +6,10 @@ from __future__ import annotations
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from scout.config import get_settings
+from scout.jobs.normaliser_job import normaliser_job
 from scout.jobs.scout_job import weekly_scout_job
 from scout.logging import get_logger
 
@@ -36,10 +38,21 @@ def start_scheduler() -> BackgroundScheduler:
         max_instances=1,
         coalesce=True,
     )
+    # Drain pending raw_findings every 15 minutes. Cheap when the queue is
+    # empty (a single COUNT(*) query) so always-on is fine.
+    _scheduler.add_job(
+        normaliser_job,
+        IntervalTrigger(minutes=15),
+        id="normaliser_drain",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
     _scheduler.start()
     log.info(
         "scheduler_started",
         weekly_cron=f"{s.cron_day_of_week} {s.cron_hour:02d}:{s.cron_minute:02d}",
+        normaliser_interval_min=15,
     )
     return _scheduler
 

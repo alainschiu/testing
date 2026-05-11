@@ -1,6 +1,12 @@
 """End-to-end scout pipeline with mocked LLM. Covers the four acceptance
 scenarios in the build brief: happy path, malformed block, dedup on re-run,
-and the web-search budget cap being passed through to the tool definition."""
+and the web-search budget cap being passed through to the tool definition.
+
+After the Phase 5a refactor the pipeline runs:
+  scout_agent → raw_findings → normaliser → opportunities
+so each fake client must script BOTH templates (`scout_agent` and `normaliser`).
+The normaliser passthrough echoes whatever raw_text it receives.
+"""
 from __future__ import annotations
 
 from scout.agents.scout_agent import (
@@ -11,6 +17,7 @@ from scout.agents.scout_agent import (
 from scout.config import get_settings
 from scout.db import connection, run_migrations
 from scout.llm.client import FakeLLMClient, LLMResponse, LLMUsage
+from tests.fixtures.normaliser_passthrough import build_passthrough_response
 from tests.fixtures.sample_scout_output import (
     HAPPY_TWO_BLOCKS,
     HAPPY_WITH_MALFORMED,
@@ -30,7 +37,8 @@ def _make_fake(text: str, *, stop_reason: str = "end_turn") -> FakeLLMClient:
                     cost_usd=0.1725,
                 ),
                 stop_reason=stop_reason,
-            )
+            ),
+            "normaliser": build_passthrough_response,
         }
     )
 
@@ -62,7 +70,7 @@ def test_rerun_with_identical_output_dedups() -> None:
     run_scout(client=fake, today_iso="2026-05-11")
     summary2 = run_scout(client=fake, today_iso="2026-05-12")
     assert "added 0" in summary2
-    assert "dedup-in-db 2" in summary2
+    assert "duplicates 2" in summary2
 
     with connection() as conn:
         n = conn.execute("SELECT COUNT(*) AS n FROM opportunities").fetchone()["n"]
@@ -109,16 +117,22 @@ def test_pause_turn_then_end_turn_concatenates_text() -> None:
         usage=LLMUsage(model="claude-opus-4-7", input_tokens=6_000, output_tokens=2_000),
         stop_reason="end_turn",
     )
-    queue = [paused, finished]
+    scout_queue = [paused, finished]
 
     class StepFake(FakeLLMClient):
         def create_message(self, **kw):  # type: ignore[override]
             self.calls.append(kw)
-            return queue.pop(0)
+            template = kw.get("prompt_template") or ""
+            if "scout_agent" in template:
+                return scout_queue.pop(0)
+            # Normaliser calls fall through to the passthrough so the
+            # post-scout normalisation step still produces opportunities.
+            return build_passthrough_response(kw)
 
     fake = StepFake()
     summary = run_scout(client=fake, today_iso="2026-05-11")
-    assert len(fake.calls) == 2, "expected one resume call after pause_turn"
+    scout_calls = [c for c in fake.calls if "scout_agent" in (c.get("prompt_template") or "")]
+    assert len(scout_calls) == 2, "expected one resume call after pause_turn"
     assert "added 2" in summary
 
 

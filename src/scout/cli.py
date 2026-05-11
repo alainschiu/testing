@@ -137,6 +137,29 @@ def digest() -> None:
     typer.echo(latest_digest())
 
 
+@app.command("normalise")
+def normalise_cmd(
+    limit: int = typer.Option(50, help="Max pending raw_findings to process"),
+) -> None:
+    """Drain pending raw_findings: convert to opportunities, reject, or duplicate."""
+    from scout.agents.normaliser import normalise_pending, pending_count
+
+    pending = pending_count()
+    if pending == 0:
+        typer.echo("nothing pending")
+        return
+    results = normalise_pending(limit=limit)
+    counts: dict[str, int] = {}
+    cost = 0.0
+    for r in results:
+        counts[r.status] = counts.get(r.status, 0) + 1
+        cost += r.cost_usd
+    summary = ", ".join(f"{k}={v}" for k, v in sorted(counts.items()))
+    typer.echo(
+        f"processed {len(results)} of {pending} pending — {summary} (cost ${cost:.4f})"
+    )
+
+
 @app.command("import-application")
 def import_application(
     path: str = typer.Argument(..., help="Path to a .md or .txt past application"),

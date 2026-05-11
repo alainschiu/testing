@@ -2,9 +2,11 @@
 
 Loads `prompts/scout_agent.md` as the system prompt, issues a user brief
 (first-run or weekly), runs Claude with Anthropic's server-side web_search tool
-capped at SCOUT_MAX_WEB_SEARCHES, parses the §8 output blocks, dedupes by
-url_hash, and persists. Robust against pause_turn, malformed blocks, and
-duplicate URLs (build brief §1.2-1.4).
+capped at SCOUT_MAX_WEB_SEARCHES, parses the §8 output blocks, dedupes within
+the response, and writes one row per finding to the `raw_findings` staging
+table (Phase 5a). The normaliser then runs to convert pending findings into
+canonical `opportunities` rows. Robust against pause_turn, malformed blocks,
+and duplicate URLs.
 """
 from __future__ import annotations
 
@@ -13,7 +15,8 @@ from dataclasses import asdict
 from pathlib import Path
 
 from scout.agents.artist_profile import refresh_artist_profile
-from scout.agents.parser import deduplicate, normalize_url, parse_findings, url_hash
+from scout.agents.normaliser import insert_raw_finding, normalise_pending
+from scout.agents.parser import deduplicate, parse_findings
 from scout.config import get_settings
 from scout.db import connection
 from scout.llm.client import LLMClient, LLMResponse, LLMUsage, estimate_cost
@@ -88,59 +91,63 @@ def _finish_run(
         )
 
 
-def _persist_findings(findings: list[ParsedFinding], *, run_id: int) -> tuple[int, int]:
-    """Insert new opportunities, skip those whose url_hash exists. Returns (added, skipped)."""
-    added = skipped = 0
-    now = utc_now_iso()
-    with connection() as conn:
-        for f in findings:
-            # No URL → still useful to record; synthetic hash keeps the unique constraint happy.
-            h = url_hash(f.url) if f.url else "no-url:" + (f.title or "")[:120]
-            existing = conn.execute(
-                "SELECT id FROM opportunities WHERE url_hash=?", (h,)
-            ).fetchone()
-            if existing:
-                conn.execute(
-                    "UPDATE opportunities SET updated_at=? WHERE id=?",
-                    (now, existing["id"]),
-                )
-                skipped += 1
-                continue
-            conn.execute(
-                "INSERT INTO opportunities ("
-                " title, type, url, url_hash, deadline, deadline_note, location, amount,"
-                " eligibility_citizenship, eligibility_career_stage, eligibility_other,"
-                " fit_score, primary_angle, backup_angle, why_fits, risk_watchout,"
-                " effort_estimate, competitiveness, raw_finding_json, source_run_id,"
-                " status, discovered_at, updated_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'lead', ?, ?)",
-                (
-                    f.title,
-                    (f.type or "other"),
-                    normalize_url(f.url) if f.url else "",
-                    h,
-                    f.deadline,
-                    f.deadline_note,
-                    f.location,
-                    f.duration_amount,
-                    f.eligibility_citizenship,
-                    f.eligibility_career_stage,
-                    f.eligibility_other,
-                    f.fit_score,
-                    f.primary_angle,
-                    f.backup_angle,
-                    f.why_fits,
-                    f.risk_watchout,
-                    f.effort_estimate,
-                    f.competitiveness,
-                    json.dumps(asdict(f), ensure_ascii=False),
-                    run_id,
-                    now,
-                    now,
-                ),
+def _persist_raw_findings(findings: list[ParsedFinding], *, run_id: int) -> list[int]:
+    """Write one raw_findings row per parsed §8 block. Returns inserted IDs.
+
+    Phase 5a refactor: scout_agent no longer writes to `opportunities` directly.
+    The block text + structured fields are stored as the raw_text body, and the
+    parsed fields go into source_meta_json so the normaliser has structured
+    data (cheap to re-validate) rather than free-form prose (expensive)."""
+    ids: list[int] = []
+    for f in findings:
+        rendered = _render_finding_for_raw_text(f)
+        meta = {
+            "scout_run_id": run_id,
+            "parsed_finding": asdict(f),
+        }
+        # Drop the bulky raw_block from meta — it's already in raw_text.
+        meta["parsed_finding"].pop("raw_block", None)
+        ids.append(
+            insert_raw_finding(
+                source="scout_agent",
+                raw_text=rendered,
+                source_url=f.url or None,
+                source_meta=meta,
             )
-            added += 1
-    return added, skipped
+        )
+    return ids
+
+
+def _render_finding_for_raw_text(f: ParsedFinding) -> str:
+    """Render a parsed finding back as text the normaliser can re-extract from.
+
+    Preserves the original block plus a structured rendering — defensive against
+    parser drift between scout output and what the normaliser expects."""
+    pairs = [
+        ("TITLE", f.title),
+        ("ORG", f.org),
+        ("TYPE", f.type),
+        ("URL", f.url),
+        ("DEADLINE", f.deadline or f.deadline_note),
+        ("LOCATION", f.location),
+        ("DURATION/AMOUNT", f.duration_amount),
+        ("ELIGIBILITY (citizenship)", f.eligibility_citizenship),
+        ("ELIGIBILITY (career stage)", f.eligibility_career_stage),
+        ("ELIGIBILITY (other)", f.eligibility_other),
+        ("FIT SCORE", f.fit_score),
+        ("ANGLE TO DEPLOY", f.primary_angle),
+        ("ANGLE BACKUP", f.backup_angle),
+        ("KEY ASKS", f.key_asks),
+        ("EFFORT ESTIMATE", f.effort_estimate),
+        ("COMPETITIVENESS", f.competitiveness),
+        ("WHY THIS FITS", f.why_fits),
+        ("RISK/WATCHOUT", f.risk_watchout),
+    ]
+    lines = [f"{label}: {value}" for label, value in pairs if value not in (None, "")]
+    structured = "\n".join(lines)
+    if f.raw_block and f.raw_block.strip() not in structured:
+        return f"{structured}\n\n--- ORIGINAL BLOCK ---\n{f.raw_block.strip()}"
+    return structured
 
 
 def _write_run_log(run_id: int, payload: dict) -> Path:
@@ -256,9 +263,22 @@ def run_scout(
         findings, quarantined = parse_findings(resp.text)
         unique, dropped_in_response = deduplicate(findings)
         qdir = _quarantine(run_id, quarantined)
-        added, skipped = _persist_findings(unique, run_id=run_id)
+        raw_ids = _persist_raw_findings(unique, run_id=run_id)
 
-        cost = resp.usage.cost_usd if resp.usage else 0.0
+        # Drain the staging table immediately so a single `scout run` produces
+        # opportunities end-to-end. The 15-min scheduler is a backstop for
+        # findings inserted by other sources between runs. Pass the same
+        # client through so test injection still works (a single FakeLLMClient
+        # scripts both `scout_agent` and `normaliser` templates).
+        norm_results = normalise_pending(limit=max(len(raw_ids), 1), client=client)
+        added = sum(1 for r in norm_results if r.status == "normalised")
+        rejected = sum(1 for r in norm_results if r.status == "rejected")
+        duplicates = sum(1 for r in norm_results if r.status == "duplicate")
+        norm_errors = sum(1 for r in norm_results if r.status == "error")
+        norm_cost = sum(r.cost_usd for r in norm_results)
+
+        scout_cost = resp.usage.cost_usd if resp.usage else 0.0
+        cost = scout_cost + norm_cost
         log_path = _write_run_log(
             run_id,
             {
@@ -271,8 +291,15 @@ def run_scout(
                 "deduped_in_response": dropped_in_response,
                 "quarantined_blocks": len(quarantined),
                 "quarantine_dir": str(qdir) if qdir else None,
-                "added": added,
-                "db_dedup_skipped": skipped,
+                "raw_findings_inserted": len(raw_ids),
+                "normaliser": {
+                    "normalised": added,
+                    "rejected": rejected,
+                    "duplicates": duplicates,
+                    "errors": norm_errors,
+                    "cost_usd": norm_cost,
+                },
+                "scout_cost_usd": scout_cost,
                 "cost_usd": cost,
                 "usage": asdict(resp.usage) if resp.usage else None,
                 "text": resp.text,
@@ -290,15 +317,18 @@ def run_scout(
             "scout_run_done",
             run_id=run_id,
             found=len(findings),
+            raw_inserted=len(raw_ids),
             added=added,
-            db_dedup_skipped=skipped,
+            duplicates=duplicates,
+            rejected=rejected,
+            normaliser_errors=norm_errors,
             quarantined=len(quarantined),
             cost_usd=cost,
         )
         return (
             f"run {run_id}: parsed {len(findings)}, added {added}, "
-            f"dedup-in-db {skipped}, quarantined {len(quarantined)}, "
-            f"cost ${cost:.4f}"
+            f"duplicates {duplicates}, rejected {rejected}, "
+            f"quarantined {len(quarantined)}, cost ${cost:.4f}"
         )
     except Exception as e:
         log.exception("scout_run_error", run_id=run_id, error=repr(e))

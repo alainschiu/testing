@@ -14,6 +14,23 @@ make migrate           # initialise the SQLite DB
 make doctor            # green checks on env, DB, API reachability
 ```
 
+## Pipeline (Phase 5a onward)
+
+Every source — the scout agent, future watchers, RSS feeds, the email-ingest
+inbox, manual capture — funnels findings into a single `raw_findings`
+staging table. A normaliser agent (cheap Sonnet-class by default) drains
+`pending` rows, calling Claude with `prompts/normaliser.md` to either:
+
+- emit one or more canonical `opportunities` rows (verdict `opportunity`),
+- mark the row `rejected` (verdict `not_an_opportunity`),
+- mark the row `error` for manual UI triage (verdict `unclear`),
+- mark the row `duplicate` and link to the existing opportunity (URL collision).
+
+`scout run` triggers normalisation at the end of each scout pass, so a single
+command still produces opportunities end-to-end. Between runs, an APScheduler
+job drains pending findings every 15 minutes (cheap when the queue is empty).
+`scout normalise` runs the drainer manually.
+
 ## LLM provider
 
 Two backends — switch with `LLM_PROVIDER` in `.env`:

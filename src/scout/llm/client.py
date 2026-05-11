@@ -150,9 +150,21 @@ class AnthropicClient(LLMClient):
 
 
 class FakeLLMClient(LLMClient):
-    """Scripted responses for tests. Key by prompt_template; falls back to default."""
+    """Scripted responses for tests. Key by prompt_template; falls back to default.
 
-    def __init__(self, responses: dict[str, LLMResponse] | None = None, default: LLMResponse | None = None) -> None:
+    Each response value can be:
+    - a single LLMResponse (returned for every call with that template)
+    - a list of LLMResponse (popped in order; raises IndexError when exhausted)
+    - a callable (kwargs) -> LLMResponse (computes a response from the call,
+      e.g. echoing input — useful for the normaliser whose output mirrors
+      whichever raw_finding it was given)
+    """
+
+    def __init__(
+        self,
+        responses: dict[str, Any] | None = None,
+        default: LLMResponse | None = None,
+    ) -> None:
         self.responses = responses or {}
         self.default = default or LLMResponse(text="", usage=LLMUsage(model="fake"))
         self.calls: list[dict[str, Any]] = []
@@ -169,13 +181,32 @@ class FakeLLMClient(LLMClient):
         prompt_template: str | None = None,
         run_id: int | None = None,
     ) -> LLMResponse:
-        self.calls.append({
+        kw = {
             "prompt_template": prompt_template,
             "run_id": run_id,
             "system_preview": (system if isinstance(system, str) else "[list]")[:200],
+            "system": system,
             "messages": messages,
             "max_tokens": max_tokens,
             "tools": tools,
             "effort": effort,
-        })
-        return self.responses.get(prompt_template or "", self.default)
+        }
+        self.calls.append(kw)
+        # Match the literal template, the basename without extension, and any
+        # template variant containing the key (e.g. "normaliser_escalated"
+        # matches "normaliser"). First match wins.
+        candidates = [prompt_template or ""]
+        if prompt_template:
+            candidates.append(prompt_template.split("/")[-1].split(".", 1)[0])
+        entry = None
+        for key, value in self.responses.items():
+            if any(key == c or (key in c if c else False) for c in candidates):
+                entry = value
+                break
+        if entry is None:
+            return self.default
+        if callable(entry):
+            return entry(kw)
+        if isinstance(entry, list):
+            return entry.pop(0)
+        return entry

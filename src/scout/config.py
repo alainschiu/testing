@@ -20,9 +20,11 @@ class Settings(BaseSettings):
     poe_api_key: str = Field(default="", alias="POE_API_KEY")
     poe_drafting_bot: str = Field(default="Claude-Opus-4.7", alias="POE_DRAFTING_BOT")
     poe_scout_bot: str = Field(default="Claude-Opus-4.7-Search", alias="POE_SCOUT_BOT")
+    poe_normaliser_bot: str = Field(default="Claude-Sonnet-4.6", alias="POE_NORMALISER_BOT")
 
     scout_model: str = Field(default="claude-opus-4-7", alias="SCOUT_MODEL")
     scout_effort: str = Field(default="high", alias="SCOUT_EFFORT")
+    normaliser_model: str = Field(default="claude-sonnet-4-6", alias="NORMALISER_MODEL")
 
     max_web_searches: int = Field(default=25, alias="SCOUT_MAX_WEB_SEARCHES")
     max_input_tokens: int = Field(default=200_000, alias="SCOUT_MAX_INPUT_TOKENS")
