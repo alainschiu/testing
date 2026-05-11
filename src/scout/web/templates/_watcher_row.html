@@ -1,0 +1,49 @@
+{% set row_w = w if w is defined else watchers[0] %}
+<tr id="watcher-row-{{ row_w['id'] }}" class="{% if not row_w['active'] %}opacity-50{% endif %}">
+  <td class="px-3 py-2 align-top">
+    <div class="font-medium">{{ row_w['name'] }}</div>
+    <a href="{{ row_w['url'] }}" target="_blank" rel="noopener" class="text-xs text-slate-500 hover:underline">{{ row_w['url'] }}</a>
+    {% if row_w['last_error'] %}
+      <div class="mt-1 text-xs text-rose-600">{{ row_w['last_error'] }}</div>
+    {% endif %}
+  </td>
+  <td class="px-3 py-2 align-top text-xs">{{ row_w['kind'] }}</td>
+  <td class="px-3 py-2 align-top text-xs font-mono">{{ row_w['schedule_cron'] }}</td>
+  <td class="px-3 py-2 align-top text-xs">{{ row_w['last_checked_at'] or '—' }}</td>
+  <td class="px-3 py-2 align-top text-xs font-mono">{{ (row_w['last_content_hash'] or '')[:8] or '—' }}</td>
+  <td class="px-3 py-2 align-top text-xs">
+    {% set fails = row_w['consecutive_failures'] or 0 %}
+    <span class="{% if fails >= 3 %}text-rose-600 font-semibold{% elif fails > 0 %}text-amber-600{% endif %}">{{ fails }}</span>
+  </td>
+  <td class="px-3 py-2 align-top text-xs">
+    <form method="post" action="/watchers/{{ row_w['id'] }}/toggle">
+      <input type="hidden" name="active" value="{{ '0' if row_w['active'] else '1' }}">
+      <button class="rounded border border-slate-300 px-2 py-1 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+        {{ 'on' if row_w['active'] else 'off' }}
+      </button>
+    </form>
+  </td>
+  <td class="px-3 py-2 align-top text-xs">
+    <div class="flex gap-2">
+      <button
+        hx-post="/watchers/{{ row_w['id'] }}/run"
+        hx-target="#watcher-row-{{ row_w['id'] }}"
+        hx-swap="outerHTML"
+        hx-indicator="#wri-{{ row_w['id'] }}"
+        class="rounded border border-slate-300 px-2 py-1 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+        Run
+      </button>
+      <span id="wri-{{ row_w['id'] }}" class="htmx-indicator text-slate-400">…</span>
+      <form method="post" action="/watchers/{{ row_w['id'] }}/delete" onsubmit="return confirm('Delete {{ row_w['name'] }}?')">
+        <button class="rounded border border-rose-300 px-2 py-1 text-rose-600 hover:bg-rose-50 dark:border-rose-800 dark:hover:bg-rose-950">
+          Del
+        </button>
+      </form>
+    </div>
+    {% if result is defined %}
+      <div class="mt-2 text-xs {% if result.status == 'ok' %}text-emerald-600{% elif result.status == 'unchanged' %}text-slate-500{% else %}text-amber-600{% endif %}">
+        {{ result.status }}{% if result.findings_inserted %} (+{{ result.findings_inserted }}){% endif %}
+      </div>
+    {% endif %}
+  </td>
+</tr>

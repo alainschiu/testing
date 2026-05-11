@@ -60,4 +60,23 @@
   </div>
   {% endfor %}
 </section>
+
+{% if source_health %}
+<footer class="mt-8 border-t border-slate-200 pt-4 text-xs text-slate-500 dark:border-slate-800">
+  <div class="flex flex-wrap items-center gap-4">
+    <span class="font-semibold uppercase tracking-wide">Source health · last {{ source_health.days }}d</span>
+    {% for cat in ['scout', 'watchers', 'rss', 'email', 'manual'] %}
+      {% set n = source_health.by_category.get(cat, 0) %}
+      <span class="inline-flex items-center gap-1">
+        <span class="h-2 w-2 rounded-full {% if n > 0 %}bg-emerald-500{% else %}bg-slate-300 dark:bg-slate-700{% endif %}"></span>
+        {{ cat }}: {{ n }}
+      </span>
+    {% endfor %}
+    <a href="/watchers" class="ml-auto hover:underline">
+      {{ source_health.active_watchers }} watchers active{% if source_health.deactivated_watchers %},
+      <span class="text-rose-600 font-medium">{{ source_health.deactivated_watchers }} deactivated</span>{% endif %}
+    </a>
+  </div>
+</footer>
+{% endif %}
 {% endblock %}

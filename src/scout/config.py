@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     cron_hour: int = Field(default=7, alias="SCOUT_CRON_HOUR")
     cron_minute: int = Field(default=0, alias="SCOUT_CRON_MINUTE")
 
+    # Daily cap on watcher LLM-extraction spend (USD, Anthropic only).
+    # 0 disables the cap. On Poe, spend reports as $0 so the cap is moot.
+    extraction_daily_usd_cap: float = Field(default=2.0, alias="EXTRACTION_DAILY_USD_CAP")
+    # Failure threshold before a watcher is auto-deactivated.
+    watcher_failure_cap: int = Field(default=3, alias="WATCHER_FAILURE_CAP")
+
     data_dir: Path = Field(default=ROOT / "data", alias="SCOUT_DATA_DIR")
     prompts_dir: Path = Field(default=ROOT / "prompts", alias="SCOUT_PROMPTS_DIR")
     db_path: Path = Field(default=ROOT / "data" / "scout.db", alias="SCOUT_DB_PATH")

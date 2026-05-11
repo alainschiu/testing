@@ -8,6 +8,7 @@ from scout.queries import (
     status_counts,
     top3_picks,
 )
+from scout.queries_sources import source_health_summary
 from scout.web.templating import templates
 
 router = APIRouter()
@@ -24,5 +25,6 @@ def dashboard(request: Request) -> HTMLResponse:
             "latest_run": latest_run(),
             "cost_mtd": cost_this_month(),
             "top3": top3_picks(),
+            "source_health": source_health_summary(days=7),
         },
     )

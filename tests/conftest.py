@@ -29,3 +29,18 @@ def _isolate_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def fake_llm() -> FakeLLMClient:
     return FakeLLMClient(default=LLMResponse(text="", usage=LLMUsage(model="fake")))
+
+
+@pytest.fixture(autouse=True)
+def _disable_politeness(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Skip the real robots.txt fetch and the 10s/domain rate limit in tests.
+    fetcher.py binds `allowed_by_robots`/`wait_for_slot` at import time, so we
+    have to patch the names on the fetcher module — patching politeness only
+    wouldn't take effect."""
+    from scout.sources import fetcher, politeness
+
+    monkeypatch.setattr(politeness, "allowed_by_robots", lambda _url: True)
+    monkeypatch.setattr(politeness, "wait_for_slot", lambda _url: None)
+    monkeypatch.setattr(fetcher, "allowed_by_robots", lambda _url: True)
+    monkeypatch.setattr(fetcher, "wait_for_slot", lambda _url: None)
+    politeness.reset_for_tests()

@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 
 from scout.db import run_migrations
 from scout.logging import configure_logging, get_logger
-from scout.web.routes import applications, dashboard, opportunities, runs, settings
+from scout.web.routes import applications, dashboard, opportunities, runs, settings, watchers
 
 log = get_logger("scout.web")
 
@@ -25,6 +25,7 @@ app.include_router(opportunities.router)
 app.include_router(applications.router)
 app.include_router(runs.router)
 app.include_router(settings.router)
+app.include_router(watchers.router)
 
 
 @app.get("/healthz")

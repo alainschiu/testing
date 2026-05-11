@@ -16,7 +16,15 @@ dependencies = [
     "apscheduler>=3.10.4",
     "httpx>=0.27.0",
     "tavily-python>=0.5.0",
+    "selectolax>=0.3.21",
+    "feedparser>=6.0.11",
+    "pyyaml>=6.0.2",
 ]
+
+[project.optional-dependencies]
+# Playwright is ~400MB once Chromium is installed (`playwright install chromium`).
+# Watchers with kind='html_js' need it; the rest of the app runs without it.
+js = ["playwright>=1.49.0"]
 
 [project.scripts]
 scout = "scout.cli:app"

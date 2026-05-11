@@ -31,6 +31,55 @@ command still produces opportunities end-to-end. Between runs, an APScheduler
 job drains pending findings every 15 minutes (cheap when the queue is empty).
 `scout normalise` runs the drainer manually.
 
+## Watchers (Phase 5b)
+
+Site/RSS/JSON pollers feed `raw_findings` on a per-source cron. Each kind
+maps to a fetcher:
+
+- `html_static` — plain HTTP + selectolax (no JS execution)
+- `html_js`     — Playwright + headless Chromium (install with the `js` extra)
+- `rss`         — feedparser; the watcher's URL is the feed
+- `json_api`    — JSON GET; the watcher's `selector` is a dotted path
+                  (e.g. `data.items`)
+
+Politeness: every fetch checks robots.txt (cached daily), waits ≥10s between
+requests to the same host, and backs off exponentially on 429/403. The
+User-Agent identifies us as a single-user research agent with a contact
+email — be findable, not stealthy.
+
+Failure handling: 3 consecutive failures auto-deactivate the watcher. The
+last error is shown on `/watchers`; the dashboard footer shows the count of
+deactivated watchers in red.
+
+LLM extraction: watchers without a CSS selector hand their scoped HTML to a
+Sonnet-class bot using `prompts/listing_extractor.md`. A daily cap
+(`EXTRACTION_DAILY_USD_CAP`, default $2) defers extraction once spent, so
+fetchers keep updating their content hashes but no further LLM calls fire
+until the next day.
+
+### Common commands
+
+```sh
+scout watchers seed              # install the 20 starter watchers
+scout watchers list              # show state, last check, failure count
+scout watchers run "name or id"  # run one watcher now (ignores cron)
+scout watchers toggle <id> --inactive
+```
+
+In the web UI, `/watchers` shows the same rows with HTMX-powered "Run now"
+buttons so you can poke each one without leaving the page.
+
+### Optional: Playwright for JS-rendered sites
+
+```sh
+uv pip install -e .[js]
+playwright install chromium      # ~400MB once
+```
+
+If Playwright isn't installed, `html_js` watchers fail with a clear error
+on their next run and auto-deactivate after 3 strikes — the rest of the app
+keeps working.
+
 ## LLM provider
 
 Two backends — switch with `LLM_PROVIDER` in `.env`:

@@ -160,6 +160,81 @@ def normalise_cmd(
     )
 
 
+watchers_app = typer.Typer(help="Manage watchers — site/RSS/JSON pollers that feed raw_findings.")
+app.add_typer(watchers_app, name="watchers")
+
+
+@watchers_app.command("list")
+def watchers_list() -> None:
+    """Show every watcher: state, last check, consecutive failures."""
+    from scout.queries_watchers import list_watchers
+
+    rows = list_watchers()
+    if not rows:
+        typer.echo("(no watchers — run `scout watchers seed` to install the starter set)")
+        return
+    for w in rows:
+        state = "ACTIVE" if w["active"] else "OFF   "
+        last = w["last_checked_at"] or "(never)"
+        fails = w["consecutive_failures"] or 0
+        typer.echo(
+            f"  {state}  [{w['id']:>3}]  {w['name']:<32}  "
+            f"{w['kind']:<11}  last={last}  fails={fails}"
+        )
+
+
+@watchers_app.command("seed")
+def watchers_seed() -> None:
+    """Insert the 20 starter watchers from Phase 5b §5b.5. Idempotent."""
+    from scout.sources.seed_watchers import seed
+
+    inserted, total = seed()
+    typer.echo(f"seeded {inserted}/{total} watchers")
+
+
+@watchers_app.command("run")
+def watchers_run(name_or_id: str = typer.Argument(..., help="Watcher name or numeric id")) -> None:
+    """Run one watcher right now (ignores its cron schedule)."""
+    from scout.queries_watchers import get_watcher, get_watcher_by_name
+    from scout.sources.watcher_runner import run_watcher
+
+    w = None
+    if name_or_id.isdigit():
+        w = get_watcher(int(name_or_id))
+    if w is None:
+        w = get_watcher_by_name(name_or_id)
+    if w is None:
+        typer.echo(f"no watcher matching {name_or_id!r}", err=True)
+        raise typer.Exit(1)
+    result = run_watcher(w)
+    typer.echo(
+        f"{result.name}: status={result.status}  inserted={result.findings_inserted}  "
+        f"cost=${result.cost_usd:.4f}"
+        + (f"  error: {result.error}" if result.error else "")
+        + (f"  ({result.detail})" if result.detail else "")
+    )
+
+
+@watchers_app.command("toggle")
+def watchers_toggle(
+    name_or_id: str = typer.Argument(...),
+    active: bool = typer.Option(..., "--active/--inactive"),
+) -> None:
+    """Activate or deactivate a watcher."""
+    from scout.queries_watchers import get_watcher, get_watcher_by_name, set_active
+
+    w = None
+    if name_or_id.isdigit():
+        w = get_watcher(int(name_or_id))
+    if w is None:
+        w = get_watcher_by_name(name_or_id)
+    if w is None:
+        typer.echo(f"no watcher matching {name_or_id!r}", err=True)
+        raise typer.Exit(1)
+    set_active(int(w["id"]), active)
+    typer.echo(f"{w['name']}: active={active}")
+
+
 @app.command("import-application")
 def import_application(
     path: str = typer.Argument(..., help="Path to a .md or .txt past application"),

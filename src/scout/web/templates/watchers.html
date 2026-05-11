@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Watchers · Scout{% endblock %}
+{% block content %}
+<div class="flex items-center justify-between mb-4">
+  <h1 class="text-xl font-semibold">Watchers</h1>
+  <span class="text-sm text-slate-500">{{ watchers|length }} configured</span>
+</div>
+
+{% if not watchers %}
+<div class="rounded-lg border border-slate-200 bg-white p-6 text-center text-slate-500 dark:border-slate-800 dark:bg-slate-950">
+  No watchers yet. Run <code class="rounded bg-slate-100 px-1 dark:bg-slate-800">scout watchers seed</code> to install the starter set, or add one via the CLI.
+</div>
+{% else %}
+<div class="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+  <table class="min-w-full divide-y divide-slate-200 bg-white text-sm dark:divide-slate-800 dark:bg-slate-950">
+    <thead class="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500 dark:bg-slate-900">
+      <tr>
+        <th class="px-3 py-2">Name</th>
+        <th class="px-3 py-2">Kind</th>
+        <th class="px-3 py-2">Schedule</th>
+        <th class="px-3 py-2">Last checked</th>
+        <th class="px-3 py-2">Hash</th>
+        <th class="px-3 py-2">Fails</th>
+        <th class="px-3 py-2">Active</th>
+        <th class="px-3 py-2"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+      {% for w in watchers %}
+        {% include "_watcher_row.html" %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}
