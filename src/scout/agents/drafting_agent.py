@@ -17,7 +17,8 @@ from scout.agents.critic import critique_draft
 from scout.agents.hallucination import verify_proper_nouns
 from scout.config import get_settings
 from scout.db import connection
-from scout.llm.client import AnthropicClient, LLMClient
+from scout.llm.client import LLMClient
+from scout.llm.factory import build_default_client
 from scout.llm.prompts import load_prompt
 from scout.logging import get_logger
 from scout.models import utc_now_iso
@@ -284,9 +285,7 @@ def generate_or_revise_draft(
         raise ValueError(f"unknown draft kind: {kind}")
     s = get_settings()
     if client is None:
-        if not s.anthropic_api_key:
-            raise RuntimeError("ANTHROPIC_API_KEY is not set; pass a LLMClient or set the key")
-        client = AnthropicClient(api_key=s.anthropic_api_key, model=s.scout_model)
+        client = build_default_client()
 
     opp = _opp_for_application(application_id)
 

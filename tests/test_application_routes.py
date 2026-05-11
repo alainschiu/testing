@@ -49,8 +49,8 @@ def _patch_llm(monkeypatch: pytest.MonkeyPatch, response_text: str) -> FakeLLMCl
         stop_reason="end_turn",
     ))
     monkeypatch.setattr(
-        "scout.agents.drafting_agent.AnthropicClient",
-        lambda *a, **kw: fake,
+        "scout.agents.drafting_agent.build_default_client",
+        lambda: fake,
     )
     return fake
 

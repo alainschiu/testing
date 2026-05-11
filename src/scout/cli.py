@@ -48,8 +48,20 @@ def doctor() -> None:
         if not condition:
             ok = False
 
-    typer.echo("env:")
-    check("ANTHROPIC_API_KEY", bool(s.anthropic_api_key), redact_secret(s.anthropic_api_key))
+    provider = (s.llm_provider or "anthropic").lower()
+    typer.echo(f"env:  (provider: {provider})")
+    if provider == "anthropic":
+        check("ANTHROPIC_API_KEY", bool(s.anthropic_api_key), redact_secret(s.anthropic_api_key))
+    elif provider == "poe":
+        check("POE_API_KEY", bool(s.poe_api_key), redact_secret(s.poe_api_key))
+        check("POE_DRAFTING_BOT set", bool(s.poe_drafting_bot), s.poe_drafting_bot)
+        check("POE_SCOUT_BOT set", bool(s.poe_scout_bot), s.poe_scout_bot)
+        if "search" not in (s.poe_scout_bot or "").lower():
+            typer.echo(
+                "    ⚠ POE_SCOUT_BOT name lacks 'search' — discovery may have no web access"
+            )
+    else:
+        check(f"LLM_PROVIDER={provider}", False, "unknown provider")
     check("data_dir exists", s.data_dir.exists(), str(s.data_dir))
     check("prompts_dir exists", s.prompts_dir.exists(), str(s.prompts_dir))
     check("scout_agent.md present", (s.prompts_dir / "scout_agent.md").exists())
@@ -69,17 +81,37 @@ def doctor() -> None:
     except Exception as e:
         check("idempotent", False, repr(e))
 
-    typer.echo("anthropic:")
-    if not s.anthropic_api_key:
-        check("reachable", False, "no API key set (skipped)")
-    else:
-        try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=s.anthropic_api_key)
-            models = client.models.list(limit=1)
-            check("reachable", True, f"first model: {models.data[0].id if models.data else '(empty)'}")
-        except Exception as e:
-            check("reachable", False, type(e).__name__)
+    typer.echo("provider reachability:")
+    if provider == "anthropic":
+        if not s.anthropic_api_key:
+            check("anthropic", False, "no API key set (skipped)")
+        else:
+            try:
+                import anthropic
+
+                client = anthropic.Anthropic(api_key=s.anthropic_api_key)
+                models = client.models.list(limit=1)
+                check("anthropic", True, f"first model: {models.data[0].id if models.data else '(empty)'}")
+            except Exception as e:
+                check("anthropic", False, type(e).__name__)
+    elif provider == "poe":
+        if not s.poe_api_key:
+            check("poe", False, "no API key set (skipped)")
+        else:
+            try:
+                import httpx
+
+                r = httpx.get(
+                    "https://api.poe.com/v1/models",
+                    headers={"Authorization": f"Bearer {s.poe_api_key}"},
+                    timeout=10.0,
+                )
+                if r.status_code == 200:
+                    check("poe", True, f"/v1/models returned {len(r.json().get('data', []))} bots")
+                else:
+                    check("poe", False, f"HTTP {r.status_code}")
+            except Exception as e:
+                check("poe", False, type(e).__name__)
 
     typer.echo("status: " + ("OK" if ok else "FAIL"))
     sys.exit(0 if ok else 1)

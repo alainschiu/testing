@@ -9,10 +9,27 @@ and the build brief for architecture.
 
 ```sh
 uv sync
-cp .env.example .env   # then fill in ANTHROPIC_API_KEY
+cp .env.example .env   # then fill in API keys (see "LLM provider" below)
 make migrate           # initialise the SQLite DB
 make doctor            # green checks on env, DB, API reachability
 ```
+
+## LLM provider
+
+Two backends — switch with `LLM_PROVIDER` in `.env`:
+
+- **`anthropic`** (default) — calls Claude directly. Requires `ANTHROPIC_API_KEY`.
+  Uses adaptive thinking, prompt caching, and Anthropic's server-side
+  `web_search` tool with a per-run cap. Cost reported in USD against published
+  per-token pricing.
+- **`poe`** — calls Poe's OpenAI-compatible endpoint
+  (`https://api.poe.com/v1/chat/completions`). Requires `POE_API_KEY`. Pick the
+  bot per role: `POE_DRAFTING_BOT` (default `Claude-Opus-4.7`) for drafting +
+  critic; `POE_SCOUT_BOT` (default `Claude-Opus-4.7-Search`) must be a
+  search-capable bot for discovery, since Poe doesn't expose `web_search` as
+  an attachable tool. `cache_control`, `thinking`, `effort`, and tool
+  attachments are silently dropped. Cost reports as `$0` (Poe is points-based)
+  — see your Poe dashboard for actual spend.
 
 ## Run
 

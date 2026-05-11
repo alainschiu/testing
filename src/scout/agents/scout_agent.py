@@ -16,7 +16,8 @@ from scout.agents.artist_profile import refresh_artist_profile
 from scout.agents.parser import deduplicate, normalize_url, parse_findings, url_hash
 from scout.config import get_settings
 from scout.db import connection
-from scout.llm.client import AnthropicClient, LLMClient, LLMResponse, LLMUsage, estimate_cost
+from scout.llm.client import LLMClient, LLMResponse, LLMUsage, estimate_cost
+from scout.llm.factory import build_default_client
 from scout.llm.prompts import load_prompt
 from scout.llm.web_search import ANTHROPIC_WEB_SEARCH_TOOL
 from scout.logging import get_logger
@@ -166,8 +167,12 @@ def _call_scout_agent(llm: LLMClient, *, run_id: int, today_iso: str) -> LLMResp
     system_prompt = load_prompt("scout_agent.md")
     user_text = _build_user_brief(is_first_run=_is_first_run(), today_iso=today_iso)
 
-    web_search_tool = {**ANTHROPIC_WEB_SEARCH_TOOL, "max_uses": s.max_web_searches}
-    tools = [web_search_tool]
+    # Server-side web_search is Anthropic-only. On other providers (e.g. Poe),
+    # discovery routes to a search-capable bot which handles retrieval itself,
+    # so we pass tools=None.
+    tools: list[dict] | None = None
+    if (s.llm_provider or "anthropic").lower() == "anthropic":
+        tools = [{**ANTHROPIC_WEB_SEARCH_TOOL, "max_uses": s.max_web_searches}]
 
     messages: list[dict] = [{"role": "user", "content": user_text}]
     text_parts: list[str] = []
@@ -204,7 +209,11 @@ def _call_scout_agent(llm: LLMClient, *, run_id: int, today_iso: str) -> LLMResp
         messages.append({"role": "assistant", "content": resp.raw_content})
         log.info("pause_turn_resume", run_id=run_id, cycle=cycle + 1)
 
-    accumulated.cost_usd = estimate_cost(s.scout_model, accumulated)
+    # Cost estimator assumes Anthropic per-token pricing. Poe is points-based
+    # and the per-message cost varies by bot, so we report 0 and rely on the
+    # Poe dashboard for actual spend.
+    if (s.llm_provider or "anthropic").lower() == "anthropic":
+        accumulated.cost_usd = estimate_cost(s.scout_model, accumulated)
     return LLMResponse(
         text="\n\n".join(text_parts),
         raw_content=[],
@@ -226,15 +235,19 @@ def run_scout(
     refresh_artist_profile()
 
     if dry_run:
+        provider = (s.llm_provider or "anthropic").lower()
+        if provider == "poe":
+            return (
+                f"dry-run: would call Poe bot '{s.poe_scout_bot}' with scout_agent.md "
+                f"as system ({s.max_output_tokens} output tokens; provider handles search)"
+            )
         return (
             f"dry-run: would call {s.scout_model} with scout_agent.md as system "
             f"(max {s.max_web_searches} searches, {s.max_output_tokens} output tokens)"
         )
 
     if client is None:
-        if not s.anthropic_api_key:
-            raise RuntimeError("ANTHROPIC_API_KEY is not set; cannot run scout without --dry-run")
-        client = AnthropicClient(api_key=s.anthropic_api_key, model=s.scout_model)
+        client = build_default_client()
 
     run_id = _start_run(kind)
     log.info("scout_run_start", run_id=run_id, kind=kind, today=today_iso)

@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
     tavily_api_key: str = Field(default="", alias="TAVILY_API_KEY")
 
+    llm_provider: str = Field(default="anthropic", alias="LLM_PROVIDER")
+    poe_api_key: str = Field(default="", alias="POE_API_KEY")
+    poe_drafting_bot: str = Field(default="Claude-Opus-4.7", alias="POE_DRAFTING_BOT")
+    poe_scout_bot: str = Field(default="Claude-Opus-4.7-Search", alias="POE_SCOUT_BOT")
+
     scout_model: str = Field(default="claude-opus-4-7", alias="SCOUT_MODEL")
     scout_effort: str = Field(default="high", alias="SCOUT_EFFORT")
 
