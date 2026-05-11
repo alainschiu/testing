@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Scout{% endblock %}
+
+{% block content %}
+<section class="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-5">
+  <div class="rounded border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950">
+    <div class="text-xs uppercase tracking-wide text-slate-500">Last run</div>
+    <div class="mt-1 text-sm font-medium">
+      {% if latest_run %}
+        {{ latest_run.started_at[:16].replace('T',' ') }}
+        <span class="text-xs text-slate-500">({{ latest_run.status }})</span>
+      {% else %}<span class="text-slate-400">none yet</span>{% endif %}
+    </div>
+  </div>
+  <div class="rounded border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950">
+    <div class="text-xs uppercase tracking-wide text-slate-500">Cost MTD</div>
+    <div class="mt-1 text-sm font-medium">{{ cost_mtd | usd }}</div>
+  </div>
+  {% for status in ['lead','triaged','drafting','applied'] %}
+  <div class="rounded border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950">
+    <div class="text-xs uppercase tracking-wide text-slate-500">{{ status }}</div>
+    <div class="mt-1 text-sm font-medium">{{ counts.get(status, 0) }}</div>
+  </div>
+  {% endfor %}
+</section>
+
+{% if top3 %}
+<section class="mb-6 rounded border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
+  <h2 class="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">Top 3 picks</h2>
+  <ol class="space-y-1 text-sm">
+    {% for opp in top3 %}
+    <li>
+      <a href="/opportunities/{{ opp.id }}" class="font-medium hover:underline">{{ opp.title }}</a>
+      <span class="text-slate-500">— fit {{ opp.fit_score or '?' }} · angle {{ opp.primary_angle or '?' }} ·</span>
+      <span class="{{ opp.deadline | deadline_class }}">{{ opp.deadline | deadline_label(opp.deadline_note) }}</span>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% endif %}
+
+<section class="grid gap-6 md:grid-cols-3">
+  {% for label, items, hint in [
+    ('Decide this week', columns.decide, 'lead/triaged · deadline ≤14d'),
+    ('Drafting', columns.drafting, 'work in progress'),
+    ('Submitted, awaiting', columns.applied, 'past the apply step')
+  ] %}
+  <div>
+    <header class="mb-2 flex items-baseline justify-between">
+      <h2 class="text-sm font-semibold uppercase tracking-wide">{{ label }}</h2>
+      <span class="text-xs text-slate-500">{{ items | length }} · {{ hint }}</span>
+    </header>
+    <div class="space-y-2">
+      {% for opp in items %}
+        {% include "opportunities/_card.html" %}
+      {% else %}
+        <div class="rounded border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400 dark:border-slate-700">empty</div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endblock %}

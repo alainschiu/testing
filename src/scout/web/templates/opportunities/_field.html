@@ -1,0 +1,17 @@
+{# Inline-editable text field for the detail view. Saves on blur via HTMX. #}
+<form id="field-{{ field }}-{{ opp.id }}" class="contents"
+      hx-post="/opportunities/{{ opp.id }}/field"
+      hx-trigger="change from:textarea[name=value] delay:300ms, change from:input[name=value] delay:300ms"
+      hx-target="this" hx-swap="outerHTML">
+  <input type="hidden" name="field" value="{{ field }}" />
+  {% set raw = opp[field] %}
+  {% if field in ('user_notes','why_fits','risk_watchout','eligibility_other') %}
+    <textarea name="value" rows="3"
+              class="w-full rounded border border-slate-200 bg-slate-50 p-2 text-sm focus:border-slate-400 focus:bg-white dark:border-slate-700 dark:bg-slate-900 dark:focus:bg-slate-950"
+              placeholder="{{ '(empty — click to add a note)' if field == 'user_notes' else '(empty)' }}">{{ raw or '' }}</textarea>
+  {% else %}
+    <input name="value" value="{{ raw or '' }}"
+           class="w-full rounded border border-slate-200 bg-slate-50 px-2 py-1 text-sm focus:border-slate-400 focus:bg-white dark:border-slate-700 dark:bg-slate-900 dark:focus:bg-slate-950"
+           placeholder="(empty)" />
+  {% endif %}
+</form>

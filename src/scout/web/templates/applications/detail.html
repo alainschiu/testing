@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Application #{{ app.id }} · Scout{% endblock %}
+
+{% set draft_kinds = [
+  ('artist_statement', 'Artist statement'),
+  ('project_description', 'Project description'),
+  ('budget', 'Budget'),
+  ('cover_letter', 'Cover letter'),
+  ('cv', 'CV (tailored)'),
+  ('work_samples', 'Work samples'),
+] %}
+{% set drafts_by_kind = {} %}
+{% for d in drafts %}{% set _ = drafts_by_kind.setdefault(d.kind, []).append(d) %}{% endfor %}
+
+{% block content %}
+<div class="mb-2 text-xs text-slate-500">
+  <a href="/opportunities/{{ opp.id }}" class="hover:underline">← {{ opp.title }}</a>
+</div>
+<header class="mb-4 flex items-baseline justify-between">
+  <h1 class="text-xl font-semibold">Application #{{ app.id }}</h1>
+  <div class="flex items-center gap-2 text-sm">
+    <span class="rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wider {{ app.status | status_class }}">{{ app.status }}</span>
+    {% if app.status == 'drafting' %}
+    <form method="post" action="/applications/{{ app.id }}/submit">
+      <button class="rounded bg-red-600 px-3 py-1 text-white hover:bg-red-700"
+              onclick="return confirm('Mark this application as submitted?')">Mark submitted</button>
+    </form>
+    {% endif %}
+  </div>
+</header>
+
+<div class="mb-4 grid gap-2 sm:grid-cols-6" role="tablist">
+  {% for k, label in draft_kinds %}
+  <button type="button" role="tab"
+          class="rounded border border-slate-200 px-2 py-1 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+          onclick="document.querySelectorAll('[data-tab]').forEach(p=>p.classList.add('hidden'));document.querySelector('[data-tab=&quot;'+'{{ k }}'+'&quot;]').classList.remove('hidden')">
+    {{ label }} {% if drafts_by_kind.get(k) %}<span class="text-xs text-green-600">✓</span>{% endif %}
+  </button>
+  {% endfor %}
+</div>
+
+{% for k, label in draft_kinds %}
+<section data-tab="{{ k }}" class="{% if not loop.first %}hidden{% endif %} rounded border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
+  {% with kind=k %}{% include "applications/_tab_panel.html" %}{% endwith %}
+</section>
+{% endfor %}
+{% endblock %}

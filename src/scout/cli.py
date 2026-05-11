@@ -105,5 +105,77 @@ def digest() -> None:
     typer.echo(latest_digest())
 
 
+@app.command("import-application")
+def import_application(
+    path: str = typer.Argument(..., help="Path to a .md or .txt past application"),
+    opportunity_id: int | None = typer.Option(
+        None, "--opportunity-id", help="Derive type/funder from this opportunity"
+    ),
+    type: str | None = typer.Option(
+        None, "--type", help="Opportunity type (when --opportunity-id is omitted)"
+    ),
+    funder: str | None = typer.Option(
+        None, "--funder", help="Funder name (when --opportunity-id is omitted)"
+    ),
+    result: str = typer.Option("won", "--result", help="won | shortlisted"),
+    max_chars: int = typer.Option(8000, help="Truncate excerpt to N chars"),
+) -> None:
+    """Ingest a past successful application as a few-shot exemplar for drafting."""
+    from pathlib import Path
+
+    from scout.db import connection, run_migrations
+    from scout.models import utc_now_iso
+
+    run_migrations()
+    p = Path(path)
+    if not p.exists():
+        typer.echo(f"file not found: {p}", err=True)
+        raise typer.Exit(1)
+    if p.suffix.lower() not in {".md", ".txt"}:
+        typer.echo("only .md and .txt are supported in v1 — convert PDFs first", err=True)
+        raise typer.Exit(1)
+    excerpt = p.read_text(encoding="utf-8")[:max_chars]
+
+    resolved_type = type
+    resolved_funder = funder
+    if opportunity_id is not None:
+        with connection() as conn:
+            opp = conn.execute(
+                "SELECT type, title FROM opportunities WHERE id = ?", (opportunity_id,)
+            ).fetchone()
+        if opp is None:
+            typer.echo(f"opportunity {opportunity_id} not found", err=True)
+            raise typer.Exit(1)
+        resolved_type = resolved_type or opp["type"]
+        resolved_funder = resolved_funder or opp["title"]
+
+    if not resolved_type:
+        typer.echo("--type (or --opportunity-id) is required", err=True)
+        raise typer.Exit(1)
+    if result not in {"won", "shortlisted"}:
+        typer.echo("--result must be 'won' or 'shortlisted'", err=True)
+        raise typer.Exit(1)
+
+    with connection() as conn:
+        cur = conn.execute(
+            "INSERT INTO past_applications"
+            " (type, funder, result, excerpt, source_path, opportunity_id, imported_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                resolved_type,
+                resolved_funder,
+                result,
+                excerpt,
+                str(p.resolve()),
+                opportunity_id,
+                utc_now_iso(),
+            ),
+        )
+    typer.echo(
+        f"imported #{cur.lastrowid}: {resolved_funder or '(no funder)'} "
+        f"[{resolved_type}, {result}, {len(excerpt)} chars]"
+    )
+
+
 if __name__ == "__main__":
     app()

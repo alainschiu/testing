@@ -1,0 +1,9 @@
+<tr class="border-b border-slate-100 last:border-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900">
+  <td class="p-2"><a href="/opportunities/{{ opp.id }}" class="font-medium hover:underline">{{ opp.title }}</a></td>
+  <td class="p-2 text-slate-600 dark:text-slate-400">{{ opp.type }}</td>
+  <td class="p-2 {{ opp.deadline | deadline_class }}">{{ opp.deadline | deadline_label(opp.deadline_note) }}</td>
+  <td class="p-2 font-mono text-xs">{{ opp.fit_score | fit_dots }}</td>
+  <td class="p-2 text-slate-600 dark:text-slate-400">{{ opp.primary_angle or '—' }}</td>
+  <td class="p-2 text-slate-600 dark:text-slate-400">{{ (opp.eligibility_citizenship or '') | short(40) }}</td>
+  <td class="p-2"><span class="rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wider {{ opp.status | status_class }}">{{ opp.status }}</span></td>
+</tr>

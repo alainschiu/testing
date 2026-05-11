@@ -29,4 +29,35 @@ make test              # pytest with mocked LLM/web
 - `migrations/` — timestamped `.sql` files, applied in order on startup.
 - `data/` — SQLite DB, run logs, drafts, artist files. Gitignored.
 
-Project status: **Phase 0–1 (skeleton + scout pipeline)** complete; UI and drafting still TODO.
+## Status
+
+| Phase | Scope                                                                          | State |
+|------:|--------------------------------------------------------------------------------|:-----:|
+| 0     | Skeleton: config, DB, migrations, LLM wrapper, CLI, FastAPI hello              | ✅    |
+| 1     | Scout discovery loop: §8 parser, dedup, pause_turn handling, weekly cron       | ✅    |
+| 2     | Catalogue UI: dashboard, list+filters, inline-edit detail, status transitions  | ✅    |
+| 3     | Drafting subsystem: 6 templates, critic, hallucination flagging, exemplars     | ✅    |
+| 4     | Polish: notifications, calendar.ics, export CLI, cost dashboard, Dockerfile    | TODO  |
+
+## Useful CLI commands
+
+```sh
+make migrate                              # apply new migrations
+make doctor                               # green-check env + DB + Anthropic
+make scout                                # one-shot discovery run
+uv run scout digest                       # human-readable summary of latest run
+uv run scout import-application PATH.md --opportunity-id 42 --result won
+```
+
+## Drafting
+
+`/applications/{id}` has one tab per component (artist statement, project
+description, budget, cover letter, CV, work samples). Each tab can generate,
+regenerate (sibling sample), or **Revise with critique** — the latter runs
+the critic pass against the previous draft and feeds the result into the next
+generation as `parent_draft_id=N`, giving a navigable revision chain.
+
+Every draft runs a post-generation proper-noun verification pass; flagged
+phrases (names not found in the artist profile / opportunity record / past
+exemplars) surface in an amber panel under the draft for human review. The
+draft is never auto-stripped.

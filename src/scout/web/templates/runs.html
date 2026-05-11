@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Runs · Scout{% endblock %}
+
+{% block content %}
+<header class="mb-4 flex items-baseline justify-between">
+  <h1 class="text-xl font-semibold">Runs</h1>
+  <div class="text-sm text-slate-500">Cost MTD: {{ cost_mtd | usd }}</div>
+</header>
+
+<div class="overflow-x-auto rounded border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
+  <table class="min-w-full text-sm">
+    <thead class="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-900">
+      <tr>
+        <th class="p-2">ID</th><th class="p-2">Kind</th><th class="p-2">Started</th>
+        <th class="p-2">Finished</th><th class="p-2">Status</th>
+        <th class="p-2 text-right">Found</th><th class="p-2 text-right">Added</th><th class="p-2 text-right">Cost</th>
+        <th class="p-2">Log</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in runs %}
+      <tr class="border-b border-slate-100 last:border-0 dark:border-slate-800">
+        <td class="p-2 font-mono">{{ r.id }}</td>
+        <td class="p-2">{{ r.kind }}</td>
+        <td class="p-2 font-mono text-xs">{{ r.started_at[:16].replace('T',' ') }}</td>
+        <td class="p-2 font-mono text-xs">{{ (r.finished_at or '')[:16].replace('T',' ') }}</td>
+        <td class="p-2">
+          {% if r.status == 'success' %}<span class="text-green-600 dark:text-green-400">✓ success</span>
+          {% elif r.status == 'error' %}<span class="text-red-600 dark:text-red-400">✗ error</span>
+          {% else %}<span class="text-slate-500">{{ r.status }}</span>{% endif %}
+        </td>
+        <td class="p-2 text-right">{{ r.opportunities_found }}</td>
+        <td class="p-2 text-right">{{ r.opportunities_added }}</td>
+        <td class="p-2 text-right font-mono text-xs">{{ r.cost_usd | usd }}</td>
+        <td class="p-2 text-xs text-slate-500">{{ r.log_path or '' }}</td>
+      </tr>
+      {% if r.error %}
+      <tr><td colspan="9" class="border-b border-slate-100 px-2 pb-2 text-xs text-red-600 dark:border-slate-800 dark:text-red-400">{{ r.error }}</td></tr>
+      {% endif %}
+      {% else %}
+      <tr><td colspan="9" class="p-6 text-center text-slate-400">no runs yet</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% set this_drafts = drafts | selectattr('kind','equalto',kind) | list %}
+{% set latest = this_drafts[0] if this_drafts else None %}
+<div class="mb-3 flex items-center justify-between gap-2">
+  <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">{{ kind.replace('_',' ') }}</h2>
+  <form hx-post="/applications/{{ app.id }}/drafts"
+        hx-target="closest section" hx-swap="innerHTML"
+        class="flex items-center gap-2 text-sm">
+    <input type="hidden" name="kind" value="{{ kind }}" />
+    {% if kind == 'artist_statement' %}
+    <select name="variant" class="rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900">
+      <option value="250w">250w</option><option value="500w" selected>500w</option><option value="1000w">1000w</option>
+    </select>
+    {% endif %}
+    {% if latest %}
+      <input type="hidden" name="parent_id" value="{{ latest.id }}" />
+      <button name="critique" value="true" class="rounded bg-amber-600 px-3 py-1 text-white hover:bg-amber-700">Revise with critique</button>
+      <button class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800">Regenerate</button>
+    {% else %}
+      <button class="rounded bg-slate-800 px-3 py-1 text-white hover:bg-slate-900 dark:bg-slate-200 dark:text-slate-900">Generate</button>
+    {% endif %}
+    <span class="htmx-indicator text-xs text-slate-500">drafting…</span>
+  </form>
+</div>
+
+{% if latest %}
+<div class="mb-2 text-xs text-slate-500">
+  v{{ this_drafts | length }} · {{ latest.word_count or '?' }} words · {{ latest.model }} · {{ latest.created_at[:16].replace('T',' ') }}
+  {% if latest.parent_draft_id %} · revised from #{{ latest.parent_draft_id }}{% endif %}
+</div>
+<pre class="whitespace-pre-wrap rounded bg-slate-50 p-3 text-sm dark:bg-slate-900">{{ latest.content }}</pre>
+
+{% if latest.hallucination_flags %}
+{% set flags = latest.hallucination_flags | fromjson %}
+{% if flags %}
+<div class="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-xs dark:border-amber-700 dark:bg-amber-950">
+  <div class="mb-1 font-semibold text-amber-800 dark:text-amber-200">Verify these proper-noun phrases against the source profile:</div>
+  <ul class="ml-4 list-disc text-amber-900 dark:text-amber-100">
+    {% for flag in flags %}<li>{{ flag }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% endif %}
+
+{% if latest.critique %}
+<details class="mt-3 rounded border border-slate-200 p-3 text-xs dark:border-slate-700">
+  <summary class="cursor-pointer text-slate-600 dark:text-slate-400">Critique applied in this revision</summary>
+  <pre class="mt-2 whitespace-pre-wrap text-slate-700 dark:text-slate-300">{{ latest.critique }}</pre>
+</details>
+{% endif %}
+
+{% if latest.cost_usd %}<div class="mt-2 text-right text-xs text-slate-500">cost {{ latest.cost_usd | usd }}</div>{% endif %}
+{% else %}
+<p class="text-sm text-slate-500">No draft yet — click <em>Generate</em> to produce one.</p>
+{% endif %}

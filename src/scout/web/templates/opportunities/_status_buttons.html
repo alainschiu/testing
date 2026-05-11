@@ -1,0 +1,22 @@
+{# Status-transition buttons. Each posts and swaps the whole bar in place. #}
+{% set bar_attrs = 'hx-target="#status-buttons" hx-swap="outerHTML"' %}
+<div id="status-buttons" class="flex flex-wrap gap-2">
+  {% if opp.status == 'lead' %}
+    <button class="rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700" hx-post="/opportunities/{{ opp.id }}/status?to=triaged" {{ bar_attrs | safe }}>Triage in</button>
+  {% endif %}
+  {% if opp.status in ('lead','triaged') %}
+    <button class="rounded bg-amber-600 px-3 py-1 text-sm text-white hover:bg-amber-700" hx-post="/opportunities/{{ opp.id }}/status?to=drafting" {{ bar_attrs | safe }}>Start draft</button>
+  {% endif %}
+  {% if opp.status == 'drafting' %}
+    <button class="rounded bg-purple-600 px-3 py-1 text-sm text-white hover:bg-purple-700"
+            hx-post="/opportunities/{{ opp.id }}/status?to=applied" {{ bar_attrs | safe }}
+            hx-confirm="Mark this as submitted?">Mark applied</button>
+  {% endif %}
+  {% if opp.status == 'applied' %}
+    <button class="rounded bg-green-600 px-3 py-1 text-sm text-white hover:bg-green-700" hx-post="/opportunities/{{ opp.id }}/status?to=won" {{ bar_attrs | safe }}>Won</button>
+    <button class="rounded bg-neutral-500 px-3 py-1 text-sm text-white hover:bg-neutral-600" hx-post="/opportunities/{{ opp.id }}/status?to=lost" {{ bar_attrs | safe }}>Lost</button>
+  {% endif %}
+  {% if opp.status not in ('won','lost','dismissed') %}
+    <button class="rounded border border-slate-300 px-3 py-1 text-sm text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800" hx-post="/opportunities/{{ opp.id }}/status?to=dismissed" {{ bar_attrs | safe }}>Dismiss</button>
+  {% endif %}
+</div>
